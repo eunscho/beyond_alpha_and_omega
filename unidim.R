@@ -20,13 +20,17 @@ unidim <- function(start_con = 1, end_con = 120, start_set = 1, end_set = 10) {
   # generate
   #========================================================================
   generate <- function(conditions, condition_number, rep_set, rep) {
+    #========================================================================
     # seed and variable names
+    #========================================================================
     set.seed(10000 * condition_number + 1000 * rep_set + rep)
     n <- as.integer(conditions[condition_number, 1])
     k <- as.integer(conditions[condition_number, 2])
     fskew <- as.double(conditions[condition_number, 3])
     fkurt <- as.double(conditions[condition_number, 4])
+    # ========================================================================
     # true reliability and omega h
+    #=========================================================================
     loadings <- .3 + .6 * runif(k) # range between .3 and .9
     avg <- mean(loadings)
     true_score <- loadings%*%t(loadings)
@@ -36,7 +40,9 @@ unidim <- function(start_con = 1, end_con = 120, start_set = 1, end_set = 10) {
     rel_dev <- (k / (k - 1)) * (dev / (sum(true_score) + sum(error_score)))
     sqrt_error_cov <- matrix(rep(0, k^2), nrow = k)
     diag(sqrt_error_cov) <- sqrt(error_score)
+    ##############################################################
     # Random data
+    #############################################################
     Skewness <- c(fskew, rep(0, k))
     Kurtosis <- c(fkurt, rep(0, k))
     Sigma <- matrix(rep(0, (k + 1)^2), nrow = k + 1)
@@ -53,12 +59,17 @@ unidim <- function(start_con = 1, end_con = 120, start_set = 1, end_set = 10) {
                             factor_score %*% loadings + error_score %*% sqrt_error_cov)
       }
     }
-    out <- list(sample_obs, rel, avg, rel_dev)
+    
+    out <- list(sample_obs = sample_obs,
+                rel = rel,
+                avg = avg,
+                rel_dev = rel_dev)
+    
     return(out)
   }
-  #===========================================================================
+  #========================================================================
   # analyze
-  #===========================================================================
+  #========================================================================
   analyze <- function(conditions, condition_number, rep_set, rep, data) {
     n <- as.integer(conditions[condition_number, 1])
     k <- as.integer(conditions[condition_number, 2])
@@ -69,6 +80,9 @@ unidim <- function(start_con = 1, end_con = 120, start_set = 1, end_set = 10) {
     rel <- data$rel
     avg <- data$avg
     rel_dev <- data$rel_dev
+    #===========================================================================
+    # reliability
+    #===========================================================================
     alpha <- reliacoef::alpha(m, print = F)
     lambda2 <- reliacoef::mu1(m, print = F)
     mu2 <- reliacoef::mu2(m, print = F)
