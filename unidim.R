@@ -1,48 +1,48 @@
-unidim <- function(start_con = 1, end_con = 120, start_set = 1, end_set = 10) {
+unidim <- function(start_con = 1, end_con = 240, start_set = 1, end_set = 10) {
   library(tidyverse)
   library(semTools)
   library(reliacoef)
   library(psych)
   library(Lambda4)
   library(tictoc)
-  library(misty)
   # specify simulation conditions
+  unitvar <- c(FALSE, TRUE)
   n <- c(50, 100, 250, 500, 1000)
   k <- c(3, 5, 7, 9)
   fskew = c(0, 2.5)
   fkurt = c(-1.2, 0, 14)
-  conditions <- tidyr::crossing(n, k, fskew, fkurt) 
-  colnames(conditions) <- c("n", "k", "fskew", "fkurt")
-  condition_numbers <- start_con:end_con
   rep_sets <- start_set:end_set
   rep_per_set <- 1:1000
+  conditions <- tidyr::crossing(unitvar, n, k, fskew, fkurt) 
+  colnames(conditions) <- c("unitvar", "n", "k", "fskew", "fkurt") 
+  condition_numbers <- start_con:end_con
   #========================================================================
-  # generate
+  # Generate
   #========================================================================
   generate <- function(conditions, condition_number, rep_set, rep) {
-    #========================================================================
     # seed and variable names
-    #========================================================================
     set.seed(10000 * condition_number + 1000 * rep_set + rep)
-    n <- as.integer(conditions[condition_number, 1])
-    k <- as.integer(conditions[condition_number, 2])
-    fskew <- as.double(conditions[condition_number, 3])
-    fkurt <- as.double(conditions[condition_number, 4])
-    # ========================================================================
+    unitvar <- as.integer(conditions[condition_number, 1])
+    n <- as.integer(conditions[condition_number, 2])
+    k <- as.integer(conditions[condition_number, 3])
+    fskew <- as.double(conditions[condition_number, 4])
+    fkurt <- as.double(conditions[condition_number, 5])
     # true reliability and omega h
-    #=========================================================================
     loadings <- .3 + .6 * runif(k) # range between .3 and .9
-    avg <- mean(loadings)
-    true_score <- loadings%*%t(loadings)
-    error_score <- 1 - diag(true_score)
+    if (unitvar) {
+      itemsd <- rep(1, k)
+    } else {
+      itemsd <- sqrt(.5 + runif(k)) # range between sqrt(.5) and sqrt(1.5)
+    }
+    true_score <- (loadings * itemsd ) %*% t(loadings * itemsd)
+    error_score <- itemsd ^ 2 - diag(true_score)
     rel <- sum(true_score) / (sum(true_score) + sum(error_score))
-    dev <- sum(diag(true_score)) - sum(true_score) / k
+    avg <- mean(loadings)
+    dev <- sum(diag(true_score)) - sum(true_score) / k # Lucke (2005)
     rel_dev <- (k / (k - 1)) * (dev / (sum(true_score) + sum(error_score)))
     sqrt_error_cov <- matrix(rep(0, k^2), nrow = k)
     diag(sqrt_error_cov) <- sqrt(error_score)
-    ##############################################################
     # Random data
-    #############################################################
     Skewness <- c(fskew, rep(0, k))
     Kurtosis <- c(fkurt, rep(0, k))
     Sigma <- matrix(rep(0, (k + 1)^2), nrow = k + 1)
@@ -53,42 +53,38 @@ unidim <- function(start_con = 1, end_con = 120, start_set = 1, end_set = 10) {
       factor_score <- randoms[1]
       error_score <- randoms[2:(k + 1)]
       if (i == 1) {
-        sample_obs <- factor_score %*% loadings + error_score %*% sqrt_error_cov
+        sample_obs <- factor_score %*% (loadings * itemsd) + error_score %*% sqrt_error_cov
       } else {
         sample_obs <- rbind(sample_obs,
-                            factor_score %*% loadings + error_score %*% sqrt_error_cov)
+                            factor_score %*% (loadings * itemsd) + error_score %*% sqrt_error_cov)
       }
     }
-    
-    out <- list(sample_obs = sample_obs,
-                rel = rel,
-                avg = avg,
-                rel_dev = rel_dev)
-    
+    out <- list(sample_obs = sample_obs, rel = rel, avg = avg, rel_dev = rel_dev)
     return(out)
   }
   #========================================================================
-  # analyze
+  # Analyze
   #========================================================================
   analyze <- function(conditions, condition_number, rep_set, rep, data) {
-    n <- as.integer(conditions[condition_number, 1])
-    k <- as.integer(conditions[condition_number, 2])
-    fskew <- as.double(conditions[condition_number, 3])
-    fkurt <- as.double(conditions[condition_number, 4])
+    unitvar <- as.integer(conditions[condition_number, 1])
+    n <- as.integer(conditions[condition_number, 2])
+    k <- as.integer(conditions[condition_number, 3])
+    fskew <- as.double(conditions[condition_number, 4])
+    fkurt <- as.double(conditions[condition_number, 5])
     m <- var(data$sample_obs)
     r <- cov2cor(m)
     rel <- data$rel
     avg <- data$avg
     rel_dev <- data$rel_dev
-    #===========================================================================
     # reliability
-    #===========================================================================
     alpha <- reliacoef::alpha(m, print = F)
     lambda2 <- reliacoef::mu1(m, print = F)
     mu2 <- reliacoef::mu2(m, print = F)
+    mu3 <- reliacoef::mu3(m, print = F)
     std_alpha <- reliacoef::alpha(r, print = F)
     std_lambda2 <- reliacoef::mu1(r, print = F)
     std_mu2 <- reliacoef::mu2(r, print = F)
+    std_mu3 <- reliacoef::mu3(r, print = F)
     glb <- psych::glb.fa(m)$glb
     joreskog <- reliacoef::joreskog(m, print = F )
     posr <- uni_cfa(r)
@@ -104,7 +100,7 @@ unidim <- function(start_con = 1, end_con = 120, start_set = 1, end_set = 10) {
     return(out)
   }
   #========================================================================
-  # Main Loop
+  # Loop
   #========================================================================
   for (condition_number in condition_numbers) {
     condition <- conditions[condition_number, ]
